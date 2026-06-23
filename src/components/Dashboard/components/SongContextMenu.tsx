@@ -25,7 +25,7 @@ export function SongContextMenu({
     >
       <button className="ctx-item ctx-fav" type="button" role="menuitem" onClick={onToggleFavorite}>
         <svg className="ctx-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <use href="#icon-heart-filled" />
+          <use href="#icon-star-filled" />
         </svg>
         <span>{song?.isFav ? 'Quitar de Tus favoritos' : 'Guardar en Tus favoritos'}</span>
       </button>
