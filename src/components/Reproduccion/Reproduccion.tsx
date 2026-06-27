@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ItemBiblioteca } from "../../interfaces/itemBiblioteca";
-import iconMusic from "../../assets/iconMusic.png";
+import { MusicSvg } from "../../icons/music-svg";
 
 interface ReproduccionProps {
   activeTrack: ItemBiblioteca | null;
@@ -228,7 +228,7 @@ const Reproduccion: React.FC<ReproduccionProps> = ({
       <div className="player" id="wt-player-root">
         <div className="player-left">
           <div className="player-thumb">
-            <img id="wt-thumb" src={iconMusic} alt="Portada" />
+            <MusicSvg color='#404040' height='3em' width='3em'/>
           </div>
 
           <div className="player-info">

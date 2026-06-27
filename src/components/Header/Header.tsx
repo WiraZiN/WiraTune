@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useMusicLibrary } from "../Dashboard/hooks/useMusicLibrary";
 
 // ─── Tauri window — inicializado una sola vez en mount ─────────────────────
 // Compatible con v1 (appWindow) y v2 (getCurrentWindow)
@@ -10,13 +11,16 @@ const resolveWindow = async (): Promise<any> => {
 };
 
 const Header: React.FC = () => {
-  const [menuOpen,  setMenuOpen]  = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [maximized, setMaximized] = useState(false);
 
   const menuWrapperRef = useRef<HTMLDivElement>(null);
-  const triggerRef     = useRef<HTMLButtonElement>(null);
-  const dropdownRef    = useRef<HTMLDivElement>(null);
-  const win            = useRef<any>(null);   // instancia cacheada
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const win = useRef<any>(null);   // instancia cacheada
+
+  const library = useMusicLibrary();
+
 
   // ── Init: resuelve la ventana Tauri y sincroniza estado de maximizado ─────
   useEffect(() => {
@@ -25,7 +29,7 @@ const Header: React.FC = () => {
         win.current = w;
         setMaximized(await w.isMaximized());
       })
-      .catch(() => {/* fuera de Tauri (browser preview) */});
+      .catch(() => {/* fuera de Tauri (browser preview) */ });
   }, []);
 
   // ── Cierra el menú al hacer clic fuera ────────────────────────────────────
@@ -56,10 +60,10 @@ const Header: React.FC = () => {
       if (!menuOpen || !dropdownRef.current) return;
       const items = [...dropdownRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]')];
       const idx = items.indexOf(document.activeElement as HTMLElement);
-      if      (e.key === "ArrowDown") { e.preventDefault(); items[(idx + 1) % items.length]?.focus(); }
-      else if (e.key === "ArrowUp")   { e.preventDefault(); items[(idx - 1 + items.length) % items.length]?.focus(); }
-      else if (e.key === "Home")      { e.preventDefault(); items[0]?.focus(); }
-      else if (e.key === "End")       { e.preventDefault(); items[items.length - 1]?.focus(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); items[(idx + 1) % items.length]?.focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); items[(idx - 1 + items.length) % items.length]?.focus(); }
+      else if (e.key === "Home") { e.preventDefault(); items[0]?.focus(); }
+      else if (e.key === "End") { e.preventDefault(); items[items.length - 1]?.focus(); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -87,6 +91,10 @@ const Header: React.FC = () => {
     win.current?.startDragging();
   };
 
+  const handleAbrirBiblioteca = () => {
+    library.setView("biblioteca")
+  }
+
   return (
     <header
       className="header"
@@ -95,10 +103,12 @@ const Header: React.FC = () => {
     >
 
       <nav className="header__nav" aria-label="Navegación principal">
-        <button className="home-btn" aria-label="Ir al inicio">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M3 10.8L12 3l9 7.8V20a1 1 0 01-1 1h-5v-5H9v5H4a1 1 0 01-1-1v-9.2z" />
+        <button className="home-btn" aria-label="Ir al inicio" onClick={handleAbrirBiblioteca}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24">
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8z" />
           </svg>
+
         </button>
 
         <div className="search-bar" role="search">
@@ -195,8 +205,8 @@ const Header: React.FC = () => {
           <svg viewBox="0 0 11 11" fill="none" aria-hidden="true">
             {maximized ? (
               <>
-                <rect x="2"   y="0.5" width="8.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1" />
-                <rect x="0.5" y="2"   width="8.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1" fill="var(--header-bg)" />
+                <rect x="2" y="0.5" width="8.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1" />
+                <rect x="0.5" y="2" width="8.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1" fill="var(--header-bg)" />
               </>
             ) : (
               <rect x="0.5" y="0.5" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1" />
@@ -211,8 +221,8 @@ const Header: React.FC = () => {
           onClick={handleClose}
         >
           <svg viewBox="0 0 11 11" fill="none" aria-hidden="true">
-            <line x1="1"  y1="1"  x2="10" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-            <line x1="10" y1="1"  x2="1"  y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            <line x1="1" y1="1" x2="10" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            <line x1="10" y1="1" x2="1" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
         </button>
       </div>

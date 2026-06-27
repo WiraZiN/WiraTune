@@ -1,5 +1,4 @@
 import type React from 'react';
-import musicIcon from '../../../assets/iconmusic.png';
 import type { Song } from '../types/song';
 
 interface AddSongsModalProps {
@@ -98,7 +97,6 @@ export function AddSongsModal({
               <ul className="pending-lst">
                 {pendingSongs.map((song, index) => (
                   <li className="pend-item" key={song.id}>
-                    <img className="pend-ico" src={musicIcon} alt="" />
                     <div className="pend-meta">
                       <div className="pend-ttl">{song.title}</div>
                       <div className="pend-art">{song.artist}</div>
