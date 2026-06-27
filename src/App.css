@@ -732,7 +732,8 @@
   }
 
   .user-menu__dropdown {
-    @apply invisible absolute right-0 top-[calc(100%+9px)] min-w-[185px] origin-top-right translate-y-[-5px] scale-[0.97] rounded-[10px] border border-solid border-[rgba(255,255,255,0.08)] bg-[#1c1c1c] p-[5px] opacity-0 shadow-[0_16px_48px_rgba(0,0,0,0.65),0_4px_12px_rgba(0,0,0,0.4)] transition-[opacity,visibility,transform] duration-[220ms] ease-[ease];
+    @apply invisible absolute right-0 top-[calc(100%+9px)] min-w-[185px] origin-top-right translate-y-[-5px] scale-[0.97] rounded-[10px] border border-solid border-[rgba(255,255,255,0.08)] bg-[#1c1c1c] p-[5px] opacity-0 shadow-[0_16px_48px_rgba(0,0,0,0.65),0_4px_12px_rgba(0,0,0,0.4)] transition-[opacity,visibility,transform] duration-[220ms] ease-[ease]
+    z-10;
   }
 
   .user-menu[data-open="true"] .user-menu__dropdown {
