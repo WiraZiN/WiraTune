@@ -3,10 +3,11 @@ import { Format } from '../utils/format';
 interface DashboardProps {
   songCount: number;
   favoriteCount: number;
+  playlistCount: number;
   totalDurationSeconds: number;
 }
 
-export function Resume({ songCount, favoriteCount, totalDurationSeconds }: DashboardProps) {
+export function Resume({ songCount, favoriteCount, playlistCount, totalDurationSeconds }: DashboardProps) {
   return (
     <section className="dashboard" aria-labelledby="dashboard-heading">
       <h1 id="dashboard-heading" className="dash-title">
@@ -24,8 +25,10 @@ export function Resume({ songCount, favoriteCount, totalDurationSeconds }: Dashb
         </div>
         <div className="stat-card">
           <span className="stat-label">Playlists</span>
-          <span className="stat-val">0</span>
-          <span className="stat-desc">Crea tu primera playlist.</span>
+          <span className="stat-val">{playlistCount}</span>
+          <span className="stat-desc">
+            {playlistCount === 0 ? 'Crea tu primera playlist.' : 'Playlists que has creado.'}
+          </span>
         </div>
         <div className="stat-card">
           <span className="stat-label">Favoritos</span>

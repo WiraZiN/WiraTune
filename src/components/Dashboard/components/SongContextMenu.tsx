@@ -7,6 +7,7 @@ interface SongContextMenuProps {
   menuRef: React.RefObject<HTMLDivElement | null>;
   onToggleFavorite: () => void;
   onDelete: () => void;
+  onRemoveFromPlaylist?: () => void;
 }
 
 export function SongContextMenu({
@@ -15,6 +16,7 @@ export function SongContextMenu({
   menuRef,
   onToggleFavorite,
   onDelete,
+  onRemoveFromPlaylist,
 }: SongContextMenuProps) {
   return (
     <div
@@ -29,6 +31,14 @@ export function SongContextMenu({
         </svg>
         <span>{song?.isFav ? 'Quitar de Tus favoritos' : 'Guardar en Tus favoritos'}</span>
       </button>
+      {onRemoveFromPlaylist && (
+        <button className="ctx-item" type="button" role="menuitem" onClick={onRemoveFromPlaylist}>
+          <svg className="ctx-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <use href="#icon-remove-circle" />
+          </svg>
+          <span>Quitar de esta playlist</span>
+        </button>
+      )}
       <button className="ctx-item ctx-del" type="button" role="menuitem" onClick={onDelete}>
         <svg className="ctx-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <use href="#icon-trash" />

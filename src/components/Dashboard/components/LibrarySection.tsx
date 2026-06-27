@@ -1,7 +1,7 @@
 import type React from 'react';
 import musicIcon from '../../../assets/iconWitube.png';
 import { ItemBiblioteca } from '../../../interfaces/itemBiblioteca';
-import type { SortKey } from '../constants';
+import { SORT_OPTIONS, type SortKey } from '../constants';
 import type { Song } from '../types/song';
 import { SongRow } from './SongRow';
 import { SortDropdown } from './SortDropdown';
@@ -77,6 +77,7 @@ export function LibrarySection({
               isOpen={isSortOpen}
               sortKey={sortKey}
               activeLabel={activeSortLabel}
+              options={SORT_OPTIONS}
               dropdownRef={sortDropdownRef}
               onToggle={onSortToggle}
               onSelect={onSortSelect}

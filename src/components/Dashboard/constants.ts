@@ -29,3 +29,15 @@ export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 export const CONTEXT_MENU_FALLBACK_SIZE = { width: 218, height: 100 };
 export const CONTEXT_MENU_VIEWPORT_GAP = 8;
 
+// Sort options for the "Tus favoritos" playlist view.
+// No "Orden personalizado" here since that option only makes sense
+// for the drag-and-drop reorderable main library.
+export type FavoritesSortKey = 'title' | 'artist' | 'recent' | 'duration';
+
+export const FAVORITES_SORT_OPTIONS: { value: FavoritesSortKey; label: string }[] = [
+  { value: 'title', label: 'Título' },
+  { value: 'artist', label: 'Artista' },
+  { value: 'recent', label: 'Agregado recientemente' },
+  { value: 'duration', label: 'Duración' },
+];
+

@@ -1,5 +1,4 @@
 import type React from 'react';
-import musicIcon from '../../../assets/iconmusic.png';
 import type { Song } from '../types/song';
 import { Format } from '../utils/format';
 
@@ -73,13 +72,12 @@ export function SongRow({
         >
           <span className="sr-icon sr-icon-play" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5V19L19 12L8 5Z" />
+              <use href="#icon-play" />
             </svg>
           </span>
           <span className="sr-icon sr-icon-pause" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 5H10V19H6V5Z" />
-              <path d="M14 5H18V19H14V5Z" />
+              <use href="#icon-pause" />
             </svg>
           </span>
           <span className="sr-icon sr-icon-eq" aria-hidden="true">
@@ -92,7 +90,11 @@ export function SongRow({
       </div>
 
       <div className="sr-info" role="cell">
-        <img className="sr-note" src={musicIcon} alt="" />
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+          <path d="M0 0h24v24H0z" fill="none" />
+          <path fill="currentColor" d="M19.978 4.251c.141-.013.272.1.272.255v9.07a3.5 3.5 0 0 0-2.062-.665c-1.977 0-3.563 1.621-3.563 3.6s1.586 3.6 3.563 3.6c1.976 0 3.562-1.622 3.562-3.6V4.506c0-1.029-.88-1.843-1.91-1.749l-10.375.956a1.753 1.753 0 0 0-1.59 1.748v9.254a3.5 3.5 0 0 0-2.062-.664c-1.977 0-3.563 1.621-3.563 3.6c0 1.978 1.586 3.599 3.563 3.599c1.976 0 3.562-1.62 3.562-3.6V5.462c0-.135.102-.243.228-.254z" />
+        </svg>
+
         <div className="sr-meta">
           <span className="sr-title">{song.title}</span>
           <span className="sr-artist">{song.artist}</span>

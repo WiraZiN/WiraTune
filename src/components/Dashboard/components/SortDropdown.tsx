@@ -1,23 +1,29 @@
 import type React from 'react';
-import { SORT_OPTIONS, type SortKey } from '../constants';
 
-interface SortDropdownProps {
-  isOpen: boolean;
-  sortKey: SortKey;
-  activeLabel: string;
-  dropdownRef: React.RefObject<HTMLDivElement | null>;
-  onToggle: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onSelect: (value: SortKey) => void;
+interface SortOption<T extends string> {
+  value: T;
+  label: string;
 }
 
-export function SortDropdown({
+interface SortDropdownProps<T extends string> {
+  isOpen: boolean;
+  sortKey: T;
+  activeLabel: string;
+  options: SortOption<T>[];
+  dropdownRef: React.RefObject<HTMLDivElement | null>;
+  onToggle: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onSelect: (value: T) => void;
+}
+
+export function SortDropdown<T extends string>({
   isOpen,
   sortKey,
   activeLabel,
+  options,
   dropdownRef,
   onToggle,
   onSelect,
-}: SortDropdownProps) {
+}: SortDropdownProps<T>) {
   return (
     <div className={`sort-dd${isOpen ? ' open' : ''}`} ref={dropdownRef}>
       <button
@@ -33,31 +39,35 @@ export function SortDropdown({
         </svg>
       </button>
 
-      {isOpen && (
-        <ul className="sort-options" role="listbox" tabIndex={-1}>
-          {SORT_OPTIONS.map(option => (
-            <li
-              key={option.value}
-              className={`sort-opt${option.value === sortKey ? ' selected' : ''}`}
-              role="option"
-              aria-selected={option.value === sortKey}
-              tabIndex={0}
-              onClick={event => {
-                event.stopPropagation();
+      <ul
+        className="sort-options"
+        role="listbox"
+        tabIndex={-1}
+        aria-hidden={!isOpen}
+      >
+        {options.map((option, index) => (
+          <li
+            key={option.value}
+            className={`sort-opt${option.value === sortKey ? ' selected' : ''}`}
+            role="option"
+            aria-selected={option.value === sortKey}
+            tabIndex={isOpen ? 0 : -1}
+            style={{ transitionDelay: isOpen ? `${index * 28}ms` : '0ms' }}
+            onClick={event => {
+              event.stopPropagation();
+              onSelect(option.value);
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
                 onSelect(option.value);
-              }}
-              onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelect(option.value);
-                }
-              }}
-            >
-              {option.label}
-            </li>
-          ))}
-        </ul>
-      )}
+              }
+            }}
+          >
+            {option.label}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
