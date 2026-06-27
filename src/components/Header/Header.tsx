@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useMusicLibrary } from "../Dashboard/hooks/useMusicLibrary";
 
 // ─── Tauri window — inicializado una sola vez en mount ─────────────────────
 // Compatible con v1 (appWindow) y v2 (getCurrentWindow)
@@ -10,6 +11,7 @@ const resolveWindow = async (): Promise<any> => {
 };
 
 const Header: React.FC = () => {
+  const library = useMusicLibrary();
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [maximized, setMaximized] = useState(false);
 
@@ -95,7 +97,12 @@ const Header: React.FC = () => {
     >
 
       <nav className="header__nav" aria-label="Navegación principal">
-        <button className="home-btn" aria-label="Ir al inicio">
+        <button
+          className="home-btn"
+          type="button"
+          aria-label="Ir al inicio"
+          onClick={() => library.setView("biblioteca")}
+        >
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M3 10.8L12 3l9 7.8V20a1 1 0 01-1 1h-5v-5H9v5H4a1 1 0 01-1-1v-9.2z" />
           </svg>

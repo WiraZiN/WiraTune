@@ -1,20 +1,67 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { SORT_OPTIONS, SUPPORTED_AUDIO_FILE_PATTERN, type SortKey } from '../constants';
 import { readAudioDuration, readId3Tags } from '../services/audioMetadata';
 import { resolveMetadata } from '../services/songMetadata';
 import type { Song } from '../types/song';
 import { Format } from '../utils/format';
 
-export function useMusicLibrary() {
-  const [songs, setSongs] = useState<Song[]>([]);
-  const [pending, setPending] = useState<Song[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>('custom');
-  const uidRef = useRef(0);
+export type LibraryView = 'biblioteca' | 'favoritos';
 
-  const nextId = () => {
-    uidRef.current += 1;
-    return uidRef.current;
-  };
+interface LibraryState {
+  songs: Song[];
+  pending: Song[];
+  sortKey: SortKey;
+  view: LibraryView;
+  playingSource: 'favoritos' | 'biblioteca' | null;
+}
+
+/**
+ * Module-level store shared by every component that calls useMusicLibrary().
+ *
+ * SidebarIzquierdo y Dashboard son componentes hermanos: no hay forma de
+ * compartir estado entre ellos solo con props sin tocar el componente padre
+ * (App). Para no depender de ese archivo (no incluido aquí), el estado de
+ * la biblioteca vive en este módulo y se sincroniza entre todas las
+ * instancias del hook mediante useSyncExternalStore. La API pública del
+ * hook no cambia para quien ya lo consumía (Dashboard.tsx), solo se agregan
+ * los campos nuevos: `view`, `setView` y `favoriteSongs`.
+ */
+let state: LibraryState = {
+  songs: [],
+  pending: [],
+  sortKey: 'custom',
+  view: 'biblioteca',
+  playingSource: null,
+};
+
+let uid = 0;
+const nextId = () => {
+  uid += 1;
+  return uid;
+};
+
+const listeners = new Set<() => void>();
+
+function setState(
+  patch: Partial<LibraryState> | ((prev: LibraryState) => Partial<LibraryState>),
+) {
+  const resolved = typeof patch === 'function' ? patch(state) : patch;
+  state = { ...state, ...resolved };
+  listeners.forEach(listener => listener());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot() {
+  return state;
+}
+
+export function useMusicLibrary() {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const { songs, pending, sortKey, view, playingSource } = snapshot;
 
   const sortedSongs = useMemo(() => {
     const sorted = [...songs];
@@ -33,7 +80,8 @@ export function useMusicLibrary() {
     }
   }, [songs, sortKey]);
 
-  const favoriteCount = useMemo(() => songs.filter(song => song.isFav).length, [songs]);
+  const favoriteSongs = useMemo(() => songs.filter(song => song.isFav), [songs]);
+  const favoriteCount = favoriteSongs.length;
 
   const totalDurationSeconds = useMemo(
     () => songs.reduce((sum, song) => sum + (song.dur || 0), 0),
@@ -69,43 +117,53 @@ export function useMusicLibrary() {
       }),
     );
 
-    setPending(prev => [...prev, ...builtSongs]);
+    setState(prev => ({ pending: [...prev.pending, ...builtSongs] }));
   }, []);
 
-  const toggleFavoriteSong = (id: number) => {
-    setSongs(prev => prev.map(song => (song.id === id ? { ...song, isFav: !song.isFav } : song)));
-  };
+  const toggleFavoriteSong = useCallback((id: number) => {
+    setState(prev => ({
+      songs: prev.songs.map(song => (song.id === id ? { ...song, isFav: !song.isFav } : song)),
+    }));
+  }, []);
 
-  const deleteSong = (id: number) => {
-    setSongs(prev => prev.filter(song => song.id !== id));
-  };
+  const deleteSong = useCallback((id: number) => {
+    setState(prev => ({ songs: prev.songs.filter(song => song.id !== id) }));
+  }, []);
 
-  const removePendingAt = (index: number) => {
-    setPending(prev => prev.filter((_, currentIndex) => currentIndex !== index));
-  };
+  const removePendingAt = useCallback((index: number) => {
+    setState(prev => ({
+      pending: prev.pending.filter((_, currentIndex) => currentIndex !== index),
+    }));
+  }, []);
 
-  const clearPending = () => setPending([]);
+  const clearPending = useCallback(() => setState({ pending: [] }), []);
 
-  const confirmPendingSongs = () => {
-    if (!pending.length) return false;
-    setSongs(prev => [...prev, ...pending]);
-    setPending([]);
+  const confirmPendingSongs = useCallback(() => {
+    if (!state.pending.length) return false;
+    setState(prev => ({ songs: [...prev.songs, ...prev.pending], pending: [] }));
     return true;
-  };
+  }, []);
 
-  const reorderSongs = (draggedId: number, targetId: number, insertAfter: boolean) => {
-    setSongs(prev => {
-      const fromIndex = prev.findIndex(song => song.id === draggedId);
-      const targetExists = prev.some(song => song.id === targetId);
-      if (fromIndex === -1 || !targetExists) return prev;
+  const reorderSongs = useCallback((draggedId: number, targetId: number, insertAfter: boolean) => {
+    setState(prev => {
+      const fromIndex = prev.songs.findIndex(song => song.id === draggedId);
+      const targetExists = prev.songs.some(song => song.id === targetId);
+      if (fromIndex === -1 || !targetExists) return {};
 
-      const next = [...prev];
+      const next = [...prev.songs];
       const [moved] = next.splice(fromIndex, 1);
       const newTargetIndex = next.findIndex(song => song.id === targetId);
       next.splice(insertAfter ? newTargetIndex + 1 : newTargetIndex, 0, moved);
-      return next;
+      return { songs: next };
     });
-  };
+  }, []);
+
+  const setSortKey = useCallback((key: SortKey) => setState({ sortKey: key }), []);
+  const setView = useCallback((nextView: LibraryView) => setState({ view: nextView }), []);
+  const setPlayingSource = useCallback(
+    (source: 'favoritos' | 'biblioteca' | null) => setState({ playingSource: source }),
+    [],
+  );
 
   return {
     songs,
@@ -114,8 +172,13 @@ export function useMusicLibrary() {
     sortKey,
     activeSortLabel,
     favoriteCount,
+    favoriteSongs,
     totalDurationSeconds,
+    view,
+    playingSource,
+    setView,
     setSortKey,
+    setPlayingSource,
     processFiles,
     toggleFavoriteSong,
     deleteSong,
@@ -125,4 +188,3 @@ export function useMusicLibrary() {
     reorderSongs,
   };
 }
-

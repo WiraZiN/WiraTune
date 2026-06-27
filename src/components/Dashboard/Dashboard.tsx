@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Resume } from './components/Resume';
 import { AddSongsModal } from './components/AddSongsModal';
+import { FavoritesSection } from './components/FavoritesSection';
 import { IconSprite } from './components/IconSprite';
 import { LibrarySection } from './components/LibrarySection';
 import { SongContextMenu } from './components/SongContextMenu';
@@ -12,8 +13,8 @@ import {
   type SortKey,
 } from './constants';
 import { useMusicLibrary } from './hooks/useMusicLibrary';
+import { mapSongToTrack } from './utils/mapSongToTrack';
 import { ItemBiblioteca } from '../../interfaces/itemBiblioteca';
-import type { Song } from './types/song';
 
 interface BodyProps {
   activeTrack?: ItemBiblioteca | null;
@@ -197,29 +198,38 @@ export default function Body(_props: BodyProps) {
     setDropIndicator(null);
   };
 
-  const mapSongToTrack = (song: Song): ItemBiblioteca => ({
-    id: song.id,
-    nombre: song.title,
-    tipo: 'song',
-    fechaAgregado: song.date,
-    artista: song.artist,
-    file: song.file,
-    title: song.title,
-    dur: song.dur,
-    durFmt: song.durFmt,
-  });
-
   const handlePlaySong = (songId: number) => {
     const song = library.songs.find(item => item.id === songId);
     if (!song) return;
 
-    const isCurrentTrack = _props.activeTrack?.id === songId;
-    if (isCurrentTrack) {
+    const source = library.view === 'favoritos' ? 'favoritos' : 'biblioteca';
+    const isCurrentTrackFromSameSource =
+      _props.activeTrack?.id === songId && library.playingSource === source;
+
+    if (isCurrentTrackFromSameSource) {
       _props.setIsPlaying?.(!_props.isPlaying);
       return;
     }
 
+    library.setPlayingSource(source);
     _props.setActiveTrack?.(mapSongToTrack(song));
+    _props.setIsPlaying?.(true);
+  };
+
+  const handlePlayFavorites = () => {
+    if (!library.favoriteSongs.length) return;
+
+    const isFavoriteTrackActive =
+      library.playingSource === 'favoritos' &&
+      library.favoriteSongs.some(song => song.id === _props.activeTrack?.id);
+
+    if (isFavoriteTrackActive) {
+      _props.setIsPlaying?.(!_props.isPlaying);
+      return;
+    }
+
+    library.setPlayingSource('favoritos');
+    _props.setActiveTrack?.(mapSongToTrack(library.favoriteSongs[0]));
     _props.setIsPlaying?.(true);
   };
 
@@ -232,35 +242,50 @@ export default function Body(_props: BodyProps) {
       <IconSprite />
 
       <div id="app">
-        <Resume
-          songCount={library.songs.length}
-          favoriteCount={library.favoriteCount}
-          totalDurationSeconds={library.totalDurationSeconds}
-        />
+        {library.view === 'favoritos' ? (
+          <FavoritesSection
+            songs={library.favoriteSongs}
+            activeTrack={library.playingSource === 'favoritos' ? _props.activeTrack ?? null : null}
+            isPlaying={library.playingSource === 'favoritos' && Boolean(_props.isPlaying)}
+            onPlaySong={handlePlaySong}
+            onPlayAll={handlePlayFavorites}
+            onFavoriteToggle={library.toggleFavoriteSong}
+            onRowContextMenu={openContextMenu}
+            onMoreClick={handleMoreClick}
+          />
+        ) : (
+          <>
+            <Resume
+              songCount={library.songs.length}
+              favoriteCount={library.favoriteCount}
+              totalDurationSeconds={library.totalDurationSeconds}
+            />
 
-        <LibrarySection
-          songs={library.sortedSongs}
-          sortKey={library.sortKey}
-          activeSortLabel={library.activeSortLabel}
-          isSortOpen={isSortOpen}
-          sortDropdownRef={sortDdRef}
-          draggingId={draggingId}
-          dropIndicator={dropIndicator}
-          activeTrack={_props.activeTrack ?? null}
-          isPlaying={Boolean(_props.isPlaying)}
-          onAddClick={() => setIsAddModalOpen(true)}
-          onWitubeClick={() => setIsWitubeModalOpen(true)}
-          onSortToggle={handleSortToggle}
-          onSortSelect={handleSortSelect}
-          onPlaySong={handlePlaySong}
-          onFavoriteToggle={library.toggleFavoriteSong}
-          onRowContextMenu={openContextMenu}
-          onMoreClick={handleMoreClick}
-          onRowDragStart={handleRowDragStart}
-          onRowDragEnd={handleRowDragEnd}
-          onRowDragOver={handleRowDragOver}
-          onRowDrop={handleRowDrop}
-        />
+            <LibrarySection
+              songs={library.sortedSongs}
+              sortKey={library.sortKey}
+              activeSortLabel={library.activeSortLabel}
+              isSortOpen={isSortOpen}
+              sortDropdownRef={sortDdRef}
+              draggingId={draggingId}
+              dropIndicator={dropIndicator}
+              activeTrack={library.playingSource === 'biblioteca' ? _props.activeTrack ?? null : null}
+              isPlaying={library.playingSource === 'biblioteca' && Boolean(_props.isPlaying)}
+              onAddClick={() => setIsAddModalOpen(true)}
+              onWitubeClick={() => setIsWitubeModalOpen(true)}
+              onSortToggle={handleSortToggle}
+              onSortSelect={handleSortSelect}
+              onPlaySong={handlePlaySong}
+              onFavoriteToggle={library.toggleFavoriteSong}
+              onRowContextMenu={openContextMenu}
+              onMoreClick={handleMoreClick}
+              onRowDragStart={handleRowDragStart}
+              onRowDragEnd={handleRowDragEnd}
+              onRowDragOver={handleRowDragOver}
+              onRowDrop={handleRowDrop}
+            />
+          </>
+        )}
       </div>
 
       {isAddModalOpen && (

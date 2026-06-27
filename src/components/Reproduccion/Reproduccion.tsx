@@ -33,7 +33,7 @@ const Reproduccion: React.FC<ReproduccionProps> = ({
 
   const canPlay = Boolean(activeTrack?.file);
   const trackName = activeTrack?.nombre ?? activeTrack?.title ?? "—";
-  const trackArtist = activeTrack?.artista || "Artista desconocido";
+  const trackArtist = activeTrack?.artista || "—";
   const currentVolume = isMuted ? 0 : volume;
   const pctProgreso = duracionTotalSegundos > 0 ? (segundos / duracionTotalSegundos) * 100 : 0;
 
@@ -96,7 +96,7 @@ const Reproduccion: React.FC<ReproduccionProps> = ({
     } else {
       audio.pause();
     }
-  }, [canPlay, isPlaying, setIsPlaying]);
+  }, [activeTrack, canPlay, isPlaying, setIsPlaying]);
 
   useEffect(() => {
     if (!ghostRef.current) return;
