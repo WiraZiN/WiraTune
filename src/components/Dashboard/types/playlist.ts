@@ -11,4 +11,5 @@ export interface Playlist {
   songIds: number[];
   sortKey: SortKey;
   createdAt: Date;
+  pinned: boolean;
 }

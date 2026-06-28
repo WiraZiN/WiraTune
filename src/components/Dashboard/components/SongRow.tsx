@@ -116,7 +116,7 @@ export function SongRow({
           onClick={() => onFavoriteToggle(song.id)}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <use href={song.isFav ? '#icon-heart-filled' : '#icon-heart-outline'} />
+            <use href={song.isFav ? '#icon-star-filled' : '#icon-star-outline'} />
           </svg>
         </button>
         <button

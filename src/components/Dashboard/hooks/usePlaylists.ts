@@ -6,24 +6,17 @@ import { pickRandomPlaylistColor } from '../utils/colors';
 interface PlaylistsState {
   playlists: Playlist[];
   selectedId: number | null;
+  editRequestId: number | null;
 }
 
-/**
- * Store a nivel de módulo, compartido por todas las instancias de
- * usePlaylists() (mismo patrón que useMusicLibrary.ts). Así
- * SidebarIzquierdo y Dashboard pueden leer y modificar la misma lista de
- * playlists sin pasar por un componente padre común.
- */
 let state: PlaylistsState = {
   playlists: [],
   selectedId: null,
+  editRequestId: null,
 };
 
 let uid = 0;
-const nextId = () => {
-  uid += 1;
-  return uid;
-};
+const nextId = () => { uid += 1; return uid; };
 
 const listeners = new Set<() => void>();
 
@@ -40,17 +33,12 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-function getSnapshot() {
-  return state;
-}
+function getSnapshot() { return state; }
 
-/**
- * Único punto que sabe cómo "actualizar una playlist por id": busca la
- * que coincide y le aplica un patch (objeto fijo, o función que recibe la
- * playlist actual y devuelve el patch). Evita repetir el mismo
- * `playlists.map(p => p.id === id ? {...} : p)` en cada setter de abajo.
- */
-function updatePlaylist(id: number, patch: Partial<Playlist> | ((playlist: Playlist) => Partial<Playlist>)) {
+function updatePlaylist(
+  id: number,
+  patch: Partial<Playlist> | ((playlist: Playlist) => Partial<Playlist>),
+) {
   setState(prev => ({
     playlists: prev.playlists.map(playlist => {
       if (playlist.id !== id) return playlist;
@@ -73,7 +61,7 @@ function nextPlaylistName(playlists: Playlist[]): string {
 
 export function usePlaylists() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
-  const { playlists, selectedId } = snapshot;
+  const { playlists, selectedId, editRequestId } = snapshot;
 
   const selected = useMemo(
     () => playlists.find(playlist => playlist.id === selectedId) ?? null,
@@ -91,13 +79,16 @@ export function usePlaylists() {
       songIds: [],
       sortKey: 'custom',
       createdAt: new Date(),
+      pinned: false,
     };
-
     setState(prev => ({ playlists: [...prev.playlists, playlist], selectedId: id }));
     return id;
   }, []);
 
-  const selectPlaylist = useCallback((id: number | null) => setState({ selectedId: id }), []);
+  const selectPlaylist = useCallback(
+    (id: number | null) => setState({ selectedId: id }),
+    [],
+  );
 
   const renamePlaylist = useCallback((id: number, name: string) => {
     const trimmed = name.trim();
@@ -118,7 +109,7 @@ export function usePlaylists() {
   const addSongs = useCallback((id: number, songIds: number[]) => {
     updatePlaylist(id, playlist => {
       const existing = new Set(playlist.songIds);
-      return { songIds: [...playlist.songIds, ...songIds.filter(songId => !existing.has(songId))] };
+      return { songIds: [...playlist.songIds, ...songIds.filter(sid => !existing.has(sid))] };
     });
   }, []);
 
@@ -133,10 +124,33 @@ export function usePlaylists() {
     [],
   );
 
+  const togglePinned = useCallback(
+    (id: number) => updatePlaylist(id, playlist => ({ pinned: !playlist.pinned })),
+    [],
+  );
+
+  const deletePlaylist = useCallback((id: number) => {
+    setState(prev => ({
+      playlists: prev.playlists.filter(p => p.id !== id),
+      selectedId: prev.selectedId === id ? null : prev.selectedId,
+    }));
+  }, []);
+
+  const requestEditPlaylist = useCallback(
+    (id: number) => setState({ editRequestId: id }),
+    [],
+  );
+
+  const clearEditRequest = useCallback(
+    () => setState({ editRequestId: null }),
+    [],
+  );
+
   return {
     playlists,
     selectedId,
     selected,
+    editRequestId,
     createPlaylist,
     selectPlaylist,
     renamePlaylist,
@@ -145,5 +159,9 @@ export function usePlaylists() {
     addSongs,
     removeSong,
     setSortKey,
+    togglePinned,
+    deletePlaylist,
+    requestEditPlaylist,
+    clearEditRequest,
   };
 }

@@ -55,6 +55,16 @@ export default function Body(_props: BodyProps) {
   const dropzoneDragDepthRef = useRef(0);
   const draggedSongIdRef = useRef<number | null>(null);
 
+  // Responder a solicitudes de edición de playlist desde la sidebar
+  useEffect(() => {
+    if (playlists.editRequestId === null) return;
+    const id = playlists.editRequestId;
+    playlists.selectPlaylist(id);
+    library.setView('playlist');
+    setEditPlaylistState({ open: true, autoPickPhoto: false });
+    playlists.clearEditRequest();
+  }, [playlists.editRequestId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const closeAddModal = useCallback(() => {
     setIsAddModalOpen(false);
     library.clearPending();
@@ -79,10 +89,6 @@ export default function Body(_props: BodyProps) {
     setCtxState({ songId, x, y });
   };
 
-  // Fábrica local: tanto el dropdown de orden de "Tu biblioteca" como el de
-  // una playlist necesitan el mismo par toggle/select (abrir-cerrar +
-  // cerrar el menú contextual al mismo tiempo), solo cambia qué estado
-  // togglean y dónde persisten el SortKey elegido.
   const makeSortToggle = (setOpen: React.Dispatch<React.SetStateAction<boolean>>) =>
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -103,12 +109,10 @@ export default function Body(_props: BodyProps) {
 
   const handleMoreClick = (event: React.MouseEvent<HTMLButtonElement>, songId: number) => {
     event.stopPropagation();
-
     if (ctxState?.songId === songId) {
       closeContextMenu();
       return;
     }
-
     const buttonRect = event.currentTarget.getBoundingClientRect();
     const menuWidth = ctxMenuRef.current?.offsetWidth || CONTEXT_MENU_FALLBACK_SIZE.width;
     openContextMenu(buttonRect.right - menuWidth, buttonRect.bottom + 6, songId);
@@ -116,12 +120,10 @@ export default function Body(_props: BodyProps) {
 
   useLayoutEffect(() => {
     if (!ctxState) return;
-
     const menuWidth = ctxMenuRef.current?.offsetWidth || CONTEXT_MENU_FALLBACK_SIZE.width;
     const menuHeight = ctxMenuRef.current?.offsetHeight || CONTEXT_MENU_FALLBACK_SIZE.height;
     const maxLeft = window.innerWidth - menuWidth - CONTEXT_MENU_VIEWPORT_GAP;
     const maxTop = window.innerHeight - menuHeight - CONTEXT_MENU_VIEWPORT_GAP;
-
     setCtxPos({
       left: Math.max(CONTEXT_MENU_VIEWPORT_GAP, Math.min(ctxState.x, maxLeft)),
       top: Math.max(CONTEXT_MENU_VIEWPORT_GAP, Math.min(ctxState.y, maxTop)),
@@ -132,14 +134,12 @@ export default function Body(_props: BodyProps) {
     const closeIfOutside = (ref: React.RefObject<HTMLElement | null>, target: Node, close: () => void) => {
       if (ref.current && !ref.current.contains(target)) close();
     };
-
     const handleDocumentClick = (event: MouseEvent) => {
       const target = event.target as Node;
       closeIfOutside(sortDdRef, target, () => setIsSortOpen(false));
       closeIfOutside(playlistSortDdRef, target, () => setIsPlaylistSortOpen(false));
       closeIfOutside(ctxMenuRef, target, closeContextMenu);
     };
-
     document.addEventListener('click', handleDocumentClick);
     return () => document.removeEventListener('click', handleDocumentClick);
   }, [closeContextMenu]);
@@ -155,7 +155,6 @@ export default function Body(_props: BodyProps) {
       setIsSortOpen(false);
       setIsPlaylistSortOpen(false);
     };
-
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [closeContextMenu, closeAddModal, closeWitubeModal, closeEditPlaylistModal, closeAddToPlaylistModal]);
@@ -166,9 +165,7 @@ export default function Body(_props: BodyProps) {
     if (dropzoneDragDepthRef.current === 1) setIsDragOver(true);
   };
 
-  const handleDropzoneDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-  };
+  const handleDropzoneDragOver = (event: React.DragEvent<HTMLDivElement>) => { event.preventDefault(); };
 
   const handleDropzoneDragLeave = () => {
     dropzoneDragDepthRef.current = Math.max(0, dropzoneDragDepthRef.current - 1);
@@ -202,7 +199,6 @@ export default function Body(_props: BodyProps) {
       event.preventDefault();
       return;
     }
-
     draggedSongIdRef.current = songId;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(songId));
@@ -218,7 +214,6 @@ export default function Body(_props: BodyProps) {
   const handleRowDragOver = (event: React.DragEvent<HTMLDivElement>, songId: number) => {
     event.preventDefault();
     if (draggedSongIdRef.current === songId) return;
-
     event.dataTransfer.dropEffect = 'move';
     const rect = event.currentTarget.getBoundingClientRect();
     setDropIndicator({ id: songId, after: event.clientY >= rect.top + rect.height / 2 });
@@ -228,7 +223,6 @@ export default function Body(_props: BodyProps) {
     event.preventDefault();
     const draggedId = draggedSongIdRef.current;
     if (draggedId === null || draggedId === songId) return;
-
     const rect = event.currentTarget.getBoundingClientRect();
     library.reorderSongs(draggedId, songId, event.clientY >= rect.top + rect.height / 2);
     setDropIndicator(null);
@@ -237,9 +231,7 @@ export default function Body(_props: BodyProps) {
   const handlePlaySong = (songId: number) => {
     const song = library.songs.find(item => item.id === songId);
     if (!song) return;
-
     const source = library.view === 'favoritos' ? 'favoritos' : 'biblioteca';
-
     togglePlayOrSwitch({
       alreadyActive: _props.activeTrack?.id === songId && library.playingSource === source,
       isPlaying: Boolean(_props.isPlaying),
@@ -253,7 +245,6 @@ export default function Body(_props: BodyProps) {
 
   const handlePlayFavorites = () => {
     if (!library.favoriteSongs.length) return;
-
     togglePlayOrSwitch({
       alreadyActive:
         library.playingSource === 'favoritos' &&
@@ -269,23 +260,16 @@ export default function Body(_props: BodyProps) {
 
   const playlistSongs = useMemo<Song[]>(() => {
     if (!playlists.selected) return [];
-
     const songMap = new Map(library.songs.map(song => [song.id, song] as const));
     const resolved = playlists.selected.songIds
       .map(id => songMap.get(id))
       .filter((song): song is Song => Boolean(song));
-
     switch (playlists.selected.sortKey) {
-      case 'title':
-        return [...resolved].sort((a, b) => a.title.localeCompare(b.title));
-      case 'artist':
-        return [...resolved].sort((a, b) => a.artist.localeCompare(b.artist));
-      case 'recent':
-        return [...resolved].sort((a, b) => b.date.getTime() - a.date.getTime());
-      case 'duration':
-        return [...resolved].sort((a, b) => a.dur - b.dur);
-      default:
-        return resolved;
+      case 'title':   return [...resolved].sort((a, b) => a.title.localeCompare(b.title));
+      case 'artist':  return [...resolved].sort((a, b) => a.artist.localeCompare(b.artist));
+      case 'recent':  return [...resolved].sort((a, b) => b.date.getTime() - a.date.getTime());
+      case 'duration':return [...resolved].sort((a, b) => a.dur - b.dur);
+      default:        return resolved;
     }
   }, [playlists.selected, library.songs]);
 
@@ -307,7 +291,6 @@ export default function Body(_props: BodyProps) {
     if (!playlists.selected) return;
     const song = library.songs.find(item => item.id === songId);
     if (!song) return;
-
     togglePlayOrSwitch({
       alreadyActive: isPlaylistQueueActive && _props.activeTrack?.id === songId,
       isPlaying: Boolean(_props.isPlaying),
@@ -322,7 +305,6 @@ export default function Body(_props: BodyProps) {
 
   const handlePlayPlaylistAll = () => {
     if (!playlists.selected || !playlistSongs.length) return;
-
     togglePlayOrSwitch({
       alreadyActive:
         isPlaylistQueueActive && playlistSongs.some(song => song.id === _props.activeTrack?.id),
@@ -362,9 +344,23 @@ export default function Body(_props: BodyProps) {
     ? library.songs.find(song => song.id === ctxState.songId)
     : undefined;
 
-  // Solo distinto de null mientras se está viendo una playlist puntual;
-  // así el menú contextual sabe cuándo ofrecer "Quitar de esta playlist".
   const currentPlaylist = library.view === 'playlist' ? playlists.selected : null;
+
+  const ctxContext = library.view === 'favoritos'
+    ? 'favorites'
+    : currentPlaylist
+      ? 'playlist'
+      : 'library';
+
+  const handleToggleInPlaylist = (playlistId: number, currentlyIn: boolean) => {
+    if (!ctxState) return;
+    if (currentlyIn) {
+      playlists.removeSong(playlistId, ctxState.songId);
+    } else {
+      playlists.addSongs(playlistId, [ctxState.songId]);
+    }
+    closeContextMenu();
+  };
 
   return (
     <>
@@ -411,7 +407,6 @@ export default function Body(_props: BodyProps) {
               playlistCount={playlists.playlists.length}
               totalDurationSeconds={library.totalDurationSeconds}
             />
-
             <LibrarySection
               songs={library.sortedSongs}
               sortKey={library.sortKey}
@@ -481,6 +476,8 @@ export default function Body(_props: BodyProps) {
           song={activeCtxSong}
           position={{ left: ctxPos?.left ?? ctxState.x, top: ctxPos?.top ?? ctxState.y }}
           menuRef={ctxMenuRef}
+          playlists={playlists.playlists}
+          context={ctxContext}
           onToggleFavorite={() => {
             library.toggleFavoriteSong(ctxState.songId);
             closeContextMenu();
@@ -497,6 +494,7 @@ export default function Body(_props: BodyProps) {
                 }
               : undefined
           }
+          onToggleInPlaylist={handleToggleInPlaylist}
         />
       )}
     </>
