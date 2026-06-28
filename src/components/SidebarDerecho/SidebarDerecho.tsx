@@ -1,175 +1,230 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
+const WEEK_SIZE     = 7;
+const RGB_THRESHOLD = 365;
+
+const RGB_COLORS = [
+  "#ff0000", "#ff7300", "#fffb00",
+  "#48ff00", "#00ffd5", "#002bff",
+  "#7a00ff", "#ff00c8",
+];
+
+const STREAK_COLOR_TIERS: [number, string][] = [
+  [1,   "#ffd54f"], // Tier 1 — Amarillo suave   (  1–9   días)
+  [10,  "#ff9800"], // Tier 2 — Naranja           ( 10–19  días)
+  [20,  "#27c7ff"], // Tier 3 — Azul eléctrico    ( 20–29  días)
+  [30,  "#19d86f"], // Tier 4 — Verde             ( 30–49  días)
+  [50,  "#ff003c"], // Tier 5 — Rojo intenso      ( 50–99  días)
+  [100, "#ff10f0"], // Tier 6 — Fucsia neón       (100–199 días)
+  [200, "#8f00ff"], // Tier 7 — Violeta           (200–364 días)
+  // Tier RGB (≥ 365) → RGB_COLORS ciclando cada 180 ms
+];
+
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const MONTH_NAMES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
+// ─── Utilidades puras ─────────────────────────────────────────────────────────
+
+function todayAtMidnight(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getActiveDaysInCycle(days: number): number {
+  if (days === 0) return 0;
+  const remainder = days % WEEK_SIZE;
+  return remainder === 0 ? WEEK_SIZE : remainder;
+}
+
+function getStreakColor(days: number, rgbIndex: number): string {
+  if (days === 0) return "#6f6f6f";
+  if (days >= RGB_THRESHOLD) return RGB_COLORS[rgbIndex];
+  for (let i = STREAK_COLOR_TIERS.length - 1; i >= 0; i--) {
+    if (days >= STREAK_COLOR_TIERS[i][0]) return STREAK_COLOR_TIERS[i][1];
+  }
+  return "#6f6f6f";
+}
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 const SidebarDerecho: React.FC = () => {
-  const [streakCount, setStreakCount] = useState(1); // Default to 4 days
-  const [cpuUsage, setCpuUsage] = useState(6);
-  const [ramUsage, setRamUsage] = useState(9);
-  const [fps, setFps] = useState(120);
-  const [ramGb, setRamGb] = useState(1.9);
+  const [streak, setStreak]                 = useState(368);
+  const [cycleStartDate, setCycleStartDate] = useState<Date>(todayAtMidnight);
+  const [rgbColorIndex, setRgbColorIndex]   = useState(0);
 
-  // Simulate stats updates to make the UI dynamic and feel alive
+  // Loop RGB: cicla colores cada 180 ms solo cuando streak ≥ 365
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCpuUsage((prev) => {
-        const change = Math.floor(Math.random() * 5) - 2; // -2 to +2
-        const next = prev + change;
-        return Math.max(2, Math.min(25, next));
-      });
+    const id = setInterval(() => {
+      if (streak >= RGB_THRESHOLD) {
+        setRgbColorIndex((prev) => (prev + 1) % RGB_COLORS.length);
+      }
+    }, 180);
+    return () => clearInterval(id);
+  }, [streak]);
 
-      setRamUsage((prev) => {
-        const change = Math.floor(Math.random() * 3) - 1; // -1 to +1
-        const next = prev + change;
-        return Math.max(5, Math.min(15, next));
-      });
+  // Valores derivados del estado
+  const activeDays   = getActiveDaysInCycle(streak);
+  const currentColor = getStreakColor(streak, rgbColorIndex);
+  const isRgbMode    = streak >= RGB_THRESHOLD;
+  const streakText   = streak === 1 ? "1 día" : `${streak} días`;
+  const progressPct  = `${(activeDays / WEEK_SIZE) * 100}%`;
 
-      setFps((prev) => {
-        const change = Math.floor(Math.random() * 7) - 3; // -3 to +3
-        const next = prev + change;
-        return Math.max(110, Math.min(144, next));
-      });
-    }, 2000);
+  // ─── Handlers ─────────────────────────────────────────────────────────────
 
-    return () => clearInterval(interval);
+  // +1 día; avanza la ventana semanal al completar un ciclo de 7
+  const simularReproduccion = useCallback(() => {
+    setStreak((prev) => {
+      if (prev > 0 && prev % WEEK_SIZE === 0) {
+        setCycleStartDate((d) => {
+          const next = new Date(d);
+          next.setDate(d.getDate() + WEEK_SIZE);
+          return next;
+        });
+      }
+      return prev + 1;
+    });
   }, []);
 
-  // Update RAM GB display dynamically based on simulated percentage
-  useEffect(() => {
-    const nextGb = (16 * ramUsage) / 100;
-    setRamGb(parseFloat(nextGb.toFixed(1)));
-  }, [ramUsage]);
+  // Reinicia racha y ventana al estado inicial
+  const perderRacha = useCallback(() => {
+    setStreak(0);
+    setCycleStartDate(todayAtMidnight());
+  }, []);
 
-  const handleRecoverStreak = () => {
-    setStreakCount(0);
-  };
+  // Salta al umbral RGB para testear el tier máximo
+  const recuperarRacha = useCallback(() => {
+    setStreak(RGB_THRESHOLD);
+    setCycleStartDate(todayAtMidnight());
+  }, []);
 
-  // Days of the week
-  const daysOfWeek = ["L", "M", "M", "J", "V", "S", "D"];
-  // We can fill completion based on streakCount dynamically
-  const isCompleted = (index: number) => {
-    return index < streakCount;
-  };
+  // ─── Datos del grid ───────────────────────────────────────────────────────
+
+  const gridDays = Array.from({ length: WEEK_SIZE }, (_, i) => {
+    const date = new Date(cycleStartDate);
+    date.setDate(cycleStartDate.getDate() + i);
+    return { date, isActive: i < activeDays };
+  });
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <aside className="r-panel" id="sidebarDerecho">
-      <div className="r-panel-scroll">
-        <section className="r-card">
-          <div aria-hidden="true" className="r-title-row streak-head-clean">
-            <span className="r-card-title">Racha de Actividad</span>
-          </div>
-          <div className="streak-hero streak-hero-centered">
-            <div className="flame-wrap">
-              <svg
-                aria-hidden="true"
-                fill="currentColor"
-                id="streakFlame"
-                viewBox="0 0 24 24"
-              >
-                <path d="M13.5 2s.5 2.5-1 4.5-4 2.5-4 7A5.5 5.5 0 0 0 14 19a5 5 0 0 0 5-5c0-4.5-3.5-6-5.5-12Zm-2 9.5c0-1.7 1.2-2.7 2.2-4 .1 1.2.9 2 1.6 2.8.8.9 1.7 1.9 1.7 3.7A3 3 0 0 1 14 17a3.5 3.5 0 0 1-3.5-3.5Z" />
-              </svg>
-            </div>
-            <div className="streak-info streak-info-centered">
-              <div className="streak-count">
-                <span id="streakCount">{streakCount}</span>{" "}
-                <span id="streakDayUnit">
-                  {streakCount === 1 ? "día" : "días"}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="streak-status" id="streakStatus">
-            {streakCount > 0
-              ? "¡Excelente progreso! Sigue adelante."
-              : "Inicia tu racha de hoy"}
-          </div>
+    <article className="streak-card">
 
-          <div className="streak-grid" id="streakWeek">
-            {daysOfWeek.map((day, index) => (
-              <div
-                key={index}
-                className={`streak-day-cell ${isCompleted(index) ? "completed" : ""}`}
-              >
-                <span className="streak-day-label">{day}</span>
-                <div className="streak-day-dot">
-                  {isCompleted(index) && (
-                    <svg
-                      className="icono-check-racha"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                    >
-                      <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z" />
-                    </svg>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* ── Llama animada + contador de días ───────────────────────── */}
+      <div className="streak-hero">
 
-          <div className="streak-test-row streak-test-row-centered">
-            <button
-              className="streak-test-btn streak-recover-btn"
-              id="streakRecoverBtn"
-              type="button"
-              onClick={handleRecoverStreak}
-            >
-              Recuperar racha
-            </button>
-          </div>
-        </section>
-
-        <section className="r-card">
-          {/*Añadir gif*/}
-          <img />
-        </section>
-
-        <div className="perf-stack">
-          <section className="perf-card">
-            <div
-              className="perf-ring"
-              id="cpuRing"
-              style={
-                {
-                  "--p": cpuUsage,
-                  "--accent": "#1db954",
-                } as React.CSSProperties
-              }
-            >
-              <div className="perf-center">
-                <div className="perf-value" id="cpuValue">
-                  {cpuUsage}%
-                </div>
-                <div className="perf-label">CPU</div>
-                <div className="perf-note" id="cpuNote">
-                  {fps} FPS aprox.
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="perf-card">
-            <div
-              className="perf-ring"
-              id="ramRing"
-              style={
-                {
-                  "--p": ramUsage,
-                  "--accent": "#4aa3ff",
-                } as React.CSSProperties
-              }
-            >
-              <div className="perf-center">
-                <div className="perf-value" id="ramValue">
-                  {ramUsage}%
-                </div>
-                <div className="perf-label">RAM</div>
-                <div className="perf-note" id="ramNote">
-                  {ramGb} GB usados
-                </div>
-              </div>
-            </div>
-          </section>
+        {/* Aura circular */}
+        <div className="streak-flame-ring">
+          <svg
+            className="streak-flame-svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+            style={{
+              color:  currentColor,
+              filter: `drop-shadow(0 0 18px ${currentColor})`,
+            }}
+          >
+            <path d="M13.5 2s.5 2.5-1 4.5-4 2.5-4 7A5.5 5.5 0 0 0 14 19a5 5 0 0 0 5-5c0-4.5-3.5-6-5.5-12Zm-2 9.5c0-1.7 1.2-2.7 2.2-4 .1 1.2.9 2 1.6 2.8.8.9 1.7 1.9 1.7 3.7A3 3 0 0 1 14 17a3.5 3.5 0 0 1-3.5-3.5Z" />
+          </svg>
         </div>
+
+        {/* Texto "N días" */}
+        <p className="streak-count" aria-live="polite">
+          {streakText}
+        </p>
       </div>
-    </aside>
+
+      {/* ── Barra de progreso semanal ────────────────────────────────
+          Se oculta cuando streak ≥ 365 (modo RGB activado)
+      ─────────────────────────────────────────────────────────────── */}
+      {!isRgbMode && (
+        <div
+          className="streak-progress-track"
+          role="progressbar"
+          aria-label="Progreso semanal"
+          aria-valuemin={0}
+          aria-valuemax={7}
+          aria-valuenow={activeDays}
+        >
+          <div
+            className="streak-progress-fill"
+            style={{ width: progressPct, background: currentColor }}
+          />
+        </div>
+      )}
+
+      {/* ── Grid de 7 días desde cycleStartDate ─────────────────────
+          border y boxShadow dinámicos → inline style por tier de color
+      ─────────────────────────────────────────────────────────────── */}
+      <div
+        className="streak-grid"
+        aria-label="Días activos de la semana actual"
+      >
+        {gridDays.map(({ date, isActive }, i) => (
+          <div
+            key={i}
+            className="streak-day"
+            style={
+              isActive
+                ? {
+                    border:    `1px solid ${currentColor}`,
+                    boxShadow: isRgbMode
+                      ? `0 0 14px ${currentColor}`
+                      : `0 0 12px ${currentColor}55`,
+                  }
+                : undefined
+            }
+          >
+            <span className="streak-day__name">
+              {DAY_NAMES[date.getDay()]}
+            </span>
+            <span className="streak-day__number">
+              {date.getDate()}
+            </span>
+            <span className="streak-day__month">
+              {MONTH_NAMES[date.getMonth()]}.
+            </span>
+            <span className="streak-day__fire" aria-hidden="true">
+              {isActive ? "🔥" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Botones de control (simulación de demo) ──────────────── */}
+      <div
+        className="streak-controls"
+        role="group"
+        aria-label="Controles de simulación"
+      >
+        <button
+          className="streak-btn streak-btn--primary"
+          onClick={simularReproduccion}
+        >
+          Simular reproducción
+        </button>
+        <button
+          className="streak-btn streak-btn--secondary"
+          onClick={perderRacha}
+        >
+          Perder racha
+        </button>
+        <button
+          className="streak-btn streak-btn--ghost"
+          onClick={recuperarRacha}
+        >
+          Recuperar racha
+        </button>
+      </div>
+
+    </article>
   );
 };
 
