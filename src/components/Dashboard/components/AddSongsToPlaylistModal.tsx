@@ -77,7 +77,7 @@ export function AddSongsToPlaylistModal({
               ) : (
                 availableSongs.map(song => (
                   <li className="pend-item" key={song.id}>
-                    <MusicSvg color='#fff' width='3em' height='3em'/>
+                    <MusicSvg color='#fff' width='2em' height='2em'/>
                     <div className="pend-meta">
                       <div className="pend-ttl">{song.title}</div>
                       <div className="pend-art">{song.artist}</div>

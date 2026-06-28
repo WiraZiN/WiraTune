@@ -4,7 +4,6 @@ interface MusicSvgProps {
     height: string
 }
 
-
 export function MusicSvg(musicSvg:MusicSvgProps) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width={musicSvg.width} height={musicSvg.height} viewBox="0 0 24 24">
