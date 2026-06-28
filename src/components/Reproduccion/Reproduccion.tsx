@@ -228,7 +228,7 @@ const Reproduccion: React.FC<ReproduccionProps> = ({
       <div className="player" id="wt-player-root">
         <div className="player-left">
           <div className="player-thumb">
-            <MusicSvg color='#404040' height='3em' width='3em'/>
+            <MusicSvg color='#404040' height='2em' width='2em'/>
           </div>
 
           <div className="player-info">
