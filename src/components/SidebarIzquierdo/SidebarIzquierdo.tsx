@@ -8,6 +8,7 @@ import { togglePlayOrSwitch } from "../Dashboard/utils/playback";
 import { MusicSvg } from "../../icons/music-svg";
 
 type OrdenType = "recientes" | "alfabetico";
+type SidebarItemId = "favoritos" | number;
 
 interface SidebarIzquierdoProps {
   activeTrack?: ItemBiblioteca | null;
@@ -25,106 +26,138 @@ const SidebarIzquierdo: React.FC<SidebarIzquierdoProps> = ({
   const library = useMusicLibrary();
   const playlists = usePlaylists();
 
-  const [filtroActivo] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [orden, setOrden] = useState<OrdenType>("recientes");
   const [mostrarMenu, setMostrarMenu] = useState(false);
-  const [items] = useState<ItemBiblioteca[]>([]);
   const [favoritosPinned, setFavoritosPinned] = useState(false);
-  const [ctxFavPos, setCtxFavPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Orden personalizado de todos los items de la sidebar (incluye "favoritos" y IDs de playlists)
+  const [customOrder, setCustomOrder] = useState<SidebarItemId[]>(["favoritos"]);
+
+  // Menú contextual unificado para cualquier item de la sidebar
+  const [ctxItem, setCtxItem] = useState<{ id: SidebarItemId; x: number; y: number } | null>(null);
+  const ctxRef = useRef<HTMLDivElement>(null);
+
+  // Playlist pendiente de confirmación de eliminación
+  const [deleteTarget, setDeleteTarget] = useState<Playlist | null>(null);
+
+  // Drag & drop en modo recientes
+  const [draggingId, setDraggingId] = useState<SidebarItemId | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: SidebarItemId; after: boolean } | null>(null);
+  const dragIdRef = useRef<SidebarItemId | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
-  const ctxFavRef = useRef<HTMLDivElement>(null);
 
-  const filtros = ["Playlists", "Artistas", "Álbumes", "Podcasts"];
+  // Sincronizar customOrder cuando se crean/eliminan playlists
+  useEffect(() => {
+    setCustomOrder(prev => {
+      const currentIdSet = new Set(playlists.playlists.map(p => p.id));
+      const filtered = prev.filter(id => id === "favoritos" || currentIdSet.has(id as number));
+      const existingSet = new Set(filtered);
+      const newItems = playlists.playlists
+        .filter(p => !existingSet.has(p.id))
+        .map(p => p.id as SidebarItemId);
+      if (newItems.length === 0 && filtered.length === prev.length) return prev;
+      return [...filtered, ...newItems];
+    });
+  }, [playlists.playlists]);
 
-  void filtros;
+  // Cerrar menú contextual al hacer click fuera o presionar Escape
+  useEffect(() => {
+    if (!ctxItem) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (ctxRef.current && !ctxRef.current.contains(e.target as Node)) setCtxItem(null);
+    };
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === "Escape") setCtxItem(null); };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [ctxItem]);
 
-  const itemsFiltrados = useMemo(() => {
-    let resultado = [...items];
-    if (busqueda.trim() !== "") {
-      resultado = resultado.filter((item) =>
-        item.nombre.toLowerCase().includes(busqueda.toLowerCase()),
-      );
-    }
-    if (filtroActivo) {
-      resultado = resultado.filter((item) => {
-        if (filtroActivo === "Playlists") return item.tipo === "playlist";
-        if (filtroActivo === "Artistas") return item.tipo === "artista";
-        if (filtroActivo === "Álbumes") return item.tipo === "album";
-        if (filtroActivo === "Podcasts") return item.tipo === "podcast";
-        return true;
-      });
-    }
+  // Cerrar el modal de confirmación de borrado con Escape
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === "Escape") setDeleteTarget(null); };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [deleteTarget]);
+
+  const getItemName = (id: SidebarItemId): string => {
+    if (id === "favoritos") return "tus favoritos";
+    return playlists.playlists.find(p => p.id === id)?.name.toLowerCase() ?? "";
+  };
+
+  const isItemPinned = (id: SidebarItemId): boolean =>
+    id === "favoritos" ? favoritosPinned : (playlists.playlists.find(p => p.id === id)?.pinned ?? false);
+
+  // Lista ordenada y filtrada de items visibles
+  const displayItems = useMemo<SidebarItemId[]>(() => {
+    const query = busqueda.trim().toLowerCase();
+    const matchesSearch = (id: SidebarItemId) => !query || getItemName(id).includes(query);
+
     if (orden === "alfabetico") {
-      resultado.sort((a, b) => a.nombre.localeCompare(b.nombre));
-    } else {
-      resultado.sort(
-        (a, b) => b.fechaAgregado.getTime() - a.fechaAgregado.getTime(),
-      );
+      const allIds: SidebarItemId[] = [
+        "favoritos",
+        ...playlists.playlists.map(p => p.id as SidebarItemId),
+      ];
+      const visible = allIds.filter(matchesSearch);
+      const pinned = visible.filter(isItemPinned).sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+      const nonPinned = visible.filter(id => !isItemPinned(id)).sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+      return [...pinned, ...nonPinned];
     }
-    return resultado;
-  }, [busqueda, filtroActivo, orden, items]);
 
+    // Modo recientes: usar customOrder con pinned primero
+    const visible = customOrder.filter(matchesSearch);
+    const pinned = visible.filter(isItemPinned);
+    const nonPinned = visible.filter(id => !isItemPinned(id));
+    return [...pinned, ...nonPinned];
+  }, [orden, busqueda, playlists.playlists, customOrder, favoritosPinned]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sinResultados = busqueda.trim() !== "" && displayItems.length === 0;
+
+  // ── Handlers de orden ──────────────────────────────────────────────
   const handleOrden = (nuevoOrden: OrdenType) => {
     setOrden(nuevoOrden);
     setMostrarMenu(false);
   };
 
-  // "Tus favoritos" siempre fijado primero: se filtra por búsqueda igual
-  // que el resto de los items, pero nunca entra al ordenamiento ni al
-  // arreglo `itemsFiltrados`, así que siempre queda renderizado antes
-  // que cualquier otro elemento de la lista.
-  const favoritosVisible = useMemo(() => {
-    const query = busqueda.trim().toLowerCase();
-    if (!query) return true;
-    return "tus favoritos".includes(query);
-  }, [busqueda]);
+  // ── Handlers de creación de playlist ──────────────────────────────
+  const handleCrearPlaylist = () => {
+    playlists.createPlaylist();
+    library.setView("playlist");
+  };
 
-  // Playlists creadas por el usuario: se filtran por la misma búsqueda de
-  // "Tu biblioteca" y se ordenan según el mismo criterio (recientes ⇒ más
-  // nueva primero, alfabético ⇒ por nombre), igual que el resto de items.
-  const playlistsVisibles = useMemo(() => {
-    const query = busqueda.trim().toLowerCase();
-    const filtradas = query
-      ? playlists.playlists.filter(playlist => playlist.name.toLowerCase().includes(query))
-      : [...playlists.playlists];
-
-    if (orden === "alfabetico") {
-      filtradas.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      filtradas.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    }
-
-    return filtradas;
-  }, [playlists.playlists, busqueda, orden]);
-
-  const favoriteSongs = library.favoriteSongs;
-  const favoriteCount = favoriteSongs.length;
-  const isFavoritosSelected = library.view === "favoritos";
-  const isFavoritosActiveTrack =
-    library.playingSource === "favoritos" && Boolean(activeTrack);
-  const isFavoritosPlaying = isFavoritosActiveTrack && Boolean(isPlaying);
-
+  // ── Handlers de navegación ─────────────────────────────────────────
   const handleAbrirFavoritos = () => {
     library.setView("favoritos");
     playlists.selectPlaylist(null);
   };
 
-  const handleAbrirFavoritosKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-  ) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      handleAbrirFavoritos();
-    }
+  const handleAbrirPlaylist = (id: number) => {
+    playlists.selectPlaylist(id);
+    library.setView("playlist");
   };
 
-  const handleTogglePlayFavoritos = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    event.stopPropagation();
-    if (favoriteCount === 0) return;
+  const handleItemClick = (id: SidebarItemId) => {
+    if (id === "favoritos") handleAbrirFavoritos();
+    else handleAbrirPlaylist(id as number);
+  };
 
+  const handleItemKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, id: SidebarItemId) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleItemClick(id); }
+  };
+
+  // ── Handlers de reproducción ───────────────────────────────────────
+  const favoriteSongs = library.favoriteSongs;
+  const isFavoritosActiveTrack = library.playingSource === "favoritos" && Boolean(activeTrack);
+  const isFavoritosPlaying = isFavoritosActiveTrack && Boolean(isPlaying);
+
+  const handleTogglePlayFavoritos = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (!favoriteSongs.length) return;
     togglePlayOrSwitch({
       alreadyActive: isFavoritosActiveTrack,
       isPlaying: Boolean(isPlaying),
@@ -136,38 +169,11 @@ const SidebarIzquierdo: React.FC<SidebarIzquierdoProps> = ({
     });
   };
 
-  // Click en "Crear +": crea una nueva playlist (Mi playlist n°1, n°2...)
-  // y navega directo a su vista, igual que hace Spotify.
-  const handleCrearPlaylist = () => {
-    playlists.createPlaylist();
-    library.setView("playlist");
-  };
-
-  const handleAbrirPlaylist = (id: number) => {
-    playlists.selectPlaylist(id);
-    library.setView("playlist");
-  };
-
-  const handleAbrirPlaylistKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-    id: number,
-  ) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      handleAbrirPlaylist(id);
-    }
-  };
-
-  const handleTogglePlayPlaylist = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    playlist: Playlist,
-  ) => {
-    event.stopPropagation();
-    if (playlist.songIds.length === 0) return;
-
-    const firstSong = library.songs.find(song => song.id === playlist.songIds[0]);
+  const handleTogglePlayPlaylist = (e: React.MouseEvent<HTMLButtonElement>, playlist: Playlist) => {
+    e.stopPropagation();
+    if (!playlist.songIds.length) return;
+    const firstSong = library.songs.find(s => s.id === playlist.songIds[0]);
     if (!firstSong) return;
-
     togglePlayOrSwitch({
       alreadyActive:
         library.playingSource === "playlist" &&
@@ -183,57 +189,219 @@ const SidebarIzquierdo: React.FC<SidebarIzquierdoProps> = ({
     });
   };
 
-  const sinResultados =
-    busqueda.trim() !== "" &&
-    itemsFiltrados.length === 0 &&
-    !favoritosVisible &&
-    playlistsVisibles.length === 0;
-
-  const handleFavoritosContextMenu = (e: React.MouseEvent) => {
+  // ── Handlers de menú contextual de sidebar ─────────────────────────
+  const handleContextMenu = (e: React.MouseEvent, id: SidebarItemId) => {
     e.preventDefault();
     e.stopPropagation();
     const x = Math.min(e.clientX, window.innerWidth - 234);
-    const y = Math.min(e.clientY, window.innerHeight - 60);
-    setCtxFavPos({ x, y });
+    const y = Math.min(e.clientY, window.innerHeight - 120);
+    setCtxItem({ id, x, y });
   };
 
-  useEffect(() => {
-    if (!ctxFavPos) return;
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (ctxFavRef.current && !ctxFavRef.current.contains(e.target as Node)) {
-        setCtxFavPos(null);
+  const handleTogglePin = (id: SidebarItemId) => {
+    if (id === "favoritos") setFavoritosPinned(prev => !prev);
+    else playlists.togglePinned(id as number);
+    setCtxItem(null);
+  };
+
+  const handleEditPlaylist = (id: number) => {
+    playlists.requestEditPlaylist(id);
+    setCtxItem(null);
+  };
+
+  const handleDeletePlaylist = (id: number) => {
+    const playlist = playlists.playlists.find(p => p.id === id) ?? null;
+    setDeleteTarget(playlist);
+    setCtxItem(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteTarget) playlists.deletePlaylist(deleteTarget.id);
+    setDeleteTarget(null);
+  };
+
+  const handleCancelDelete = () => setDeleteTarget(null);
+
+  // ── Handlers de drag & drop (solo en modo recientes) ──────────────
+  const canDrag = orden === "recientes";
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: SidebarItemId) => {
+    if (!canDrag) return;
+    dragIdRef.current = id;
+    e.dataTransfer.effectAllowed = "move";
+    setTimeout(() => setDraggingId(id), 0);
+  };
+
+  const handleDragEnd = () => {
+    dragIdRef.current = null;
+    setDraggingId(null);
+    setDropTarget(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, id: SidebarItemId) => {
+    if (!canDrag || !dragIdRef.current) return;
+    e.preventDefault();
+    if (dragIdRef.current === id) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropTarget({ id, after: e.clientY >= rect.top + rect.height / 2 });
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetId: SidebarItemId) => {
+    e.preventDefault();
+    const movedId = dragIdRef.current;
+    if (!movedId || movedId === targetId) {
+      setDraggingId(null);
+      setDropTarget(null);
+      return;
+    }
+    const insertAfter = dropTarget?.after ?? false;
+    setCustomOrder(prev => {
+      const next = [...prev];
+      const fromIdx = next.indexOf(movedId);
+      if (fromIdx === -1) return prev;
+      next.splice(fromIdx, 1);
+      const toIdx = next.indexOf(targetId);
+      if (toIdx === -1) return prev;
+      next.splice(insertAfter ? toIdx + 1 : toIdx, 0, movedId);
+      return next;
+    });
+    setDraggingId(null);
+    setDropTarget(null);
+  };
+
+  // ── Render de un item genérico ─────────────────────────────────────
+  const renderItem = (id: SidebarItemId) => {
+    const isFav = id === "favoritos";
+    const playlist = isFav ? null : playlists.playlists.find(p => p.id === id);
+    if (!isFav && !playlist) return null;
+
+    const isPinned = isItemPinned(id);
+    const isDragging = draggingId === id;
+    const dropPos = dropTarget?.id === id ? (dropTarget.after ? "after" : "before") : null;
+
+    let isSelected: boolean;
+    let isThisPlaying: boolean;
+    let songCount: number;
+    let name: string;
+    let coverEl: React.ReactNode;
+    let playBtn: React.ReactNode;
+    let soundIcon: React.ReactNode | null = null;
+
+    if (isFav) {
+      isSelected = library.view === "favoritos";
+      isThisPlaying = isFavoritosPlaying;
+      songCount = favoriteSongs.length;
+      name = "Tus favoritos";
+      coverEl = <img src={iconFavoritos} alt="" className="item-cover" />;
+      playBtn = (
+        <button
+          type="button"
+          className="item-play-overlay border-0"
+          aria-label={isFavoritosPlaying ? "Pausar Tus favoritos" : "Reproducir Tus favoritos"}
+          disabled={songCount === 0}
+          onClick={handleTogglePlayFavoritos}
+        >
+          <svg className="icono-play-hover" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <use href={isFavoritosPlaying ? "#icon-pause" : "#icon-play"} />
+          </svg>
+        </button>
+      );
+      if (isFavoritosPlaying) {
+        soundIcon = (
+          <svg className="icono-sonido-activo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <use href="#icon-sound-active" />
+          </svg>
+        );
       }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCtxFavPos(null);
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [ctxFavPos]);
+    } else {
+      const pl = playlist!;
+      isSelected = library.view === "playlist" && playlists.selectedId === pl.id;
+      isThisPlaying =
+        library.playingSource === "playlist" &&
+        library.playingPlaylistId === pl.id &&
+        Boolean(activeTrack) &&
+        Boolean(isPlaying);
+      songCount = pl.songIds.length;
+      name = pl.name;
+      coverEl = pl.coverImage
+        ? <img src={pl.coverImage} alt="" className="item-cover" />
+        : <MusicSvg color="#404040" width="2em" height="2em" />;
+      playBtn = (
+        <button
+          type="button"
+          className="item-play-overlay border-0"
+          aria-label={isThisPlaying ? `Pausar ${pl.name}` : `Reproducir ${pl.name}`}
+          disabled={songCount === 0}
+          onClick={e => handleTogglePlayPlaylist(e, pl)}
+        >
+          <svg className="icono-play-hover" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <use href={isThisPlaying ? "#icon-pause" : "#icon-play"} />
+          </svg>
+        </button>
+      );
+      if (isThisPlaying) {
+        soundIcon = (
+          <svg className="icono-sonido-activo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <use href="#icon-sound-active" />
+          </svg>
+        );
+      }
+    }
+
+    const wrapperClass = [
+      "sidebar-item-wrapper",
+      isSelected ? "seleccionado" : "",
+      isDragging ? "sidebar-dragging" : "",
+      dropPos === "before" ? "sidebar-drop-before" : "",
+      dropPos === "after" ? "sidebar-drop-after" : "",
+    ].filter(Boolean).join(" ");
+
+    return (
+      <div
+        className={wrapperClass}
+        role="button"
+        tabIndex={0}
+        draggable={canDrag}
+        onClick={() => handleItemClick(id)}
+        onKeyDown={e => handleItemKeyDown(e, id)}
+        onContextMenu={e => handleContextMenu(e, id)}
+        onDragStart={e => handleDragStart(e, id)}
+        onDragEnd={handleDragEnd}
+        onDragOver={e => handleDragOver(e, id)}
+        onDrop={e => handleDrop(e, id)}
+      >
+        <div className={`item-imagen-wrapper${!isFav && !playlist?.coverImage ? " bg-[#282828]" : ""}`}>
+          {coverEl}
+          {playBtn}
+        </div>
+
+        <div className="sidebar-item-info">
+          <span className={`item-nombre${isThisPlaying ? " activo" : ""}`}>{name}</span>
+          <span className="item-detalles">
+            {isPinned && (
+              <svg className="pin-icono" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <use href="#icon-pin" />
+              </svg>
+            )}
+            <span>Playlist</span>
+            <span className="separador-punto">•</span>
+            <span>{songCount} {songCount === 1 ? "canción" : "canciones"}</span>
+          </span>
+        </div>
+
+        {soundIcon}
+      </div>
+    );
+  };
 
   return (
     <aside className="sidebar-izquierdo">
       <div className="sidebar-header">
         <div className="sidebar-titulo-fila">
-          <svg
-            className="icono-biblioteca"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
+          <svg className="icono-biblioteca" viewBox="0 0 24 24" fill="currentColor">
             <rect x="3" y="3" width="3" height="18" rx="1.5" />
             <rect x="10" y="3" width="3" height="18" rx="1.5" />
-            <rect
-              x="15"
-              y="4"
-              width="3"
-              height="18"
-              rx="1.5"
-              transform="rotate(15 16.5 13)"
-            />
+            <rect x="15" y="4" width="3" height="18" rx="1.5" transform="rotate(15 16.5 13)" />
           </svg>
           <span className="sidebar-titulo">Tu biblioteca</span>
           <button className="filtro-pill" type="button" onClick={handleCrearPlaylist}>
@@ -244,92 +412,57 @@ const SidebarIzquierdo: React.FC<SidebarIzquierdoProps> = ({
         <div className="sidebar-busqueda-fila">
           <div className="search">
             <svg className="icono-lupa" viewBox="0 0 24 24" fill="none">
-              <circle
-                cx="11"
-                cy="11"
-                r="7"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <path
-                d="M16.5 16.5L21 21"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+              <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-
             <input
               ref={inputRef}
               className="sidebar-input"
               type="text"
               placeholder="Buscar en Tu biblioteca"
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={e => setBusqueda(e.target.value)}
             />
             {busqueda && (
-              <button
-                className="btn-limpiar"
-                onClick={() => setBusqueda("")}
-                title="Limpiar búsqueda"
-              >
+              <button className="btn-limpiar" onClick={() => setBusqueda("")} title="Limpiar búsqueda">
                 ✕
               </button>
             )}
           </div>
 
           <div className="orden-wrapper">
-            <button
-              className="btn-orden"
-              onClick={() => setMostrarMenu(!mostrarMenu)}
-            >
+            <button className="btn-orden" onClick={() => setMostrarMenu(!mostrarMenu)}>
               <span className="orden-label">
                 {orden === "recientes" ? "Recientes" : "Alfabéticamente"}
               </span>
               <svg className="icono-orden" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M2 4h12M4 8h8M6 12h4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
+                <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </button>
 
             {mostrarMenu && (
               <>
-                <div
-                  className="orden-overlay"
-                  onClick={() => setMostrarMenu(false)}
-                />
+                <div className="orden-overlay" onClick={() => setMostrarMenu(false)} />
                 <div className="orden-menu">
                   <p className="orden-menu-titulo">Clasificar por</p>
                   <button
-                    className={`orden-opcion ${orden === "recientes" ? "activo" : ""}`}
+                    className={`orden-opcion${orden === "recientes" ? " activo" : ""}`}
                     onClick={() => handleOrden("recientes")}
                   >
                     Recientes
                     {orden === "recientes" && (
-                      <svg
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        className="icono-check"
-                      >
+                      <svg viewBox="0 0 16 16" fill="none" className="icono-check">
                         <use href="#icon-check" />
                       </svg>
                     )}
                   </button>
                   <button
-                    className={`orden-opcion ${orden === "alfabetico" ? "activo" : ""}`}
+                    className={`orden-opcion${orden === "alfabetico" ? " activo" : ""}`}
                     onClick={() => handleOrden("alfabetico")}
                   >
                     Alfabéticamente
                     {orden === "alfabetico" && (
-                      <svg
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        className="icono-check"
-                      >
+                      <svg viewBox="0 0 16 16" fill="none" className="icono-check">
                         <use href="#icon-check" />
                       </svg>
                     )}
@@ -343,210 +476,115 @@ const SidebarIzquierdo: React.FC<SidebarIzquierdoProps> = ({
 
       <div className="sidebar-lista">
         <div className="items-contenedor">
-          {favoritosVisible && (
-            <div
-              className={`sidebar-item-wrapper${isFavoritosSelected ? " seleccionado" : ""}`}
-              role="button"
-              tabIndex={0}
-              onClick={handleAbrirFavoritos}
-              onKeyDown={handleAbrirFavoritosKeyDown}
-              onContextMenu={handleFavoritosContextMenu}
-            >
-              <div className="item-imagen-wrapper">
-                <img src={iconFavoritos} alt="" className="item-cover" />
-
-                {/* El botón es siempre visible en el DOM;
-                    el CSS lo muestra únicamente al hacer hover
-                    (.sidebar-item-wrapper:hover .item-play-overlay) */}
-                <button
-                  type="button"
-                  className="item-play-overlay border-0"
-                  aria-label={
-                    isFavoritosPlaying
-                      ? "Pausar Tus favoritos"
-                      : "Reproducir Tus favoritos"
-                  }
-                  disabled={favoriteCount === 0}
-                  onClick={handleTogglePlayFavoritos}
-                >
-                  <svg
-                    className="icono-play-hover"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <use href={isFavoritosPlaying ? "#icon-pause" : "#icon-play"} />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="sidebar-item-info">
-                <span
-                  className={`item-nombre${isFavoritosPlaying ? " activo" : ""}`}
-                >
-                  Tus favoritos
-                </span>
-                <span className="item-detalles">
-                  {favoritosPinned && (
-                    <svg
-                      className="pin-icono"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <use href="#icon-pin" />
-                    </svg>
-                  )}
-                  <span>Playlist</span>
-                  <span className="separador-punto">•</span>
-                  <span>
-                    {favoriteCount}{" "}
-                    {favoriteCount === 1 ? "canción" : "canciones"}
-                  </span>
-                </span>
-              </div>
-
-              {isFavoritosPlaying && (
-                <svg
-                  className="icono-sonido-activo"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <use href="#icon-sound-active" />
-                </svg>
-              )}
-            </div>
-          )}
-
-          {playlistsVisibles.map(playlist => {
-            const isSelected =
-              library.view === "playlist" && playlists.selectedId === playlist.id;
-            const isThisPlaylistPlaying =
-              library.playingSource === "playlist" &&
-              library.playingPlaylistId === playlist.id &&
-              Boolean(activeTrack) &&
-              Boolean(isPlaying);
-            const songCount = playlist.songIds.length;
-
-            return (
-              <div
-                key={playlist.id}
-                className={`sidebar-item-wrapper${isSelected ? " seleccionado" : ""}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleAbrirPlaylist(playlist.id)}
-                onKeyDown={event => handleAbrirPlaylistKeyDown(event, playlist.id)}
-              >
-                <div
-                  className={`item-imagen-wrapper${playlist.coverImage ? "" : " bg-[#282828]"}`}
-                >
-
-                  {playlist.coverImage ? <img
-                    src={playlist.coverImage}
-                    alt=""
-                    className={playlist.coverImage ? "item-cover" : "playlist-default-icon"}
-                  /> : <MusicSvg color="#404040" width="2em" height="2em"/>}
-
-
-
-                  {/* El botón es siempre visible en el DOM; el CSS lo muestra
-                      únicamente al hacer hover (.sidebar-item-wrapper:hover .item-play-overlay) */}
-                  <button
-                    type="button"
-                    className="item-play-overlay border-0"
-                    aria-label={
-                      isThisPlaylistPlaying
-                        ? `Pausar ${playlist.name}`
-                        : `Reproducir ${playlist.name}`
-                    }
-                    disabled={songCount === 0}
-                    onClick={event => handleTogglePlayPlaylist(event, playlist)}
-                  >
-                    <svg
-                      className="icono-play-hover"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <use href={isThisPlaylistPlaying ? "#icon-pause" : "#icon-play"} />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="sidebar-item-info">
-                  <span
-                    className={`item-nombre${isThisPlaylistPlaying ? " activo" : ""}`}
-                  >
-                    {playlist.name}
-                  </span>
-                  <span className="item-detalles">
-                    <span>Playlist</span>
-                    <span className="separador-punto">•</span>
-                    <span>
-                      {songCount} {songCount === 1 ? "canción" : "canciones"}
-                    </span>
-                  </span>
-                </div>
-
-                {isThisPlaylistPlaying && (
-                  <svg
-                    className="icono-sonido-activo"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <use href="#icon-sound-active" />
-                  </svg>
-                )}
-              </div>
-            );
-          })}
+          {displayItems.map(id => (
+            <React.Fragment key={String(id)}>
+              {renderItem(id)}
+            </React.Fragment>
+          ))}
         </div>
 
         {sinResultados && (
           <div className="estado-vacio">
-            <p className="vacio-titulo">
-              No pudimos encontrar &ldquo;{busqueda}&rdquo;
-            </p>
+            <p className="vacio-titulo">No pudimos encontrar &ldquo;{busqueda}&rdquo;</p>
             <p className="vacio-descripcion">
-              Vuelve a probar escribiéndolo de otra forma o con una palabra
-              clave diferente.
+              Vuelve a probar escribiéndolo de otra forma o con una palabra clave diferente.
             </p>
           </div>
         )}
       </div>
 
-      {/* Menú contextual de "Tus favoritos" */}
-      {ctxFavPos && (
+      {/* Menú contextual de items de la sidebar */}
+      {ctxItem && (
         <div
-          ref={ctxFavRef}
+          ref={ctxRef}
           className="ctx-menu"
           role="menu"
-          style={{ left: ctxFavPos.x, top: ctxFavPos.y }}
+          style={{ left: ctxItem.x, top: ctxItem.y }}
         >
+          {/* Fijar / Dejar de fijar */}
           <button
             type="button"
             className="ctx-item"
             role="menuitem"
-            onClick={() => {
-              setFavoritosPinned((prev) => !prev);
-              setCtxFavPos(null);
-            }}
+            onClick={() => handleTogglePin(ctxItem.id)}
           >
             <svg
               className="ctx-ico"
               viewBox="0 0 24 24"
               fill="currentColor"
               aria-hidden="true"
-              style={{ color: favoritosPinned ? "#1db954" : undefined }}
+              style={{ color: isItemPinned(ctxItem.id) ? "#1db954" : undefined }}
             >
               <use href="#icon-pin" />
             </svg>
-            <span>
-              {favoritosPinned ? "Dejar de fijar playlist" : "Fijar playlist"}
-            </span>
+            <span>{isItemPinned(ctxItem.id) ? "Dejar de fijar playlist" : "Fijar playlist"}</span>
           </button>
+
+          {/* Editar detalles (solo playlists de usuario) */}
+          {ctxItem.id !== "favoritos" && (
+            <button
+              type="button"
+              className="ctx-item"
+              role="menuitem"
+              onClick={() => handleEditPlaylist(ctxItem.id as number)}
+            >
+              <svg className="ctx-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <use href="#icon-edit" />
+              </svg>
+              <span>Editar detalles</span>
+            </button>
+          )}
+
+          {/* Eliminar playlist (solo playlists de usuario) */}
+          {ctxItem.id !== "favoritos" && (
+            <button
+              type="button"
+              className="ctx-item ctx-del"
+              role="menuitem"
+              onClick={() => handleDeletePlaylist(ctxItem.id as number)}
+            >
+              <svg className="ctx-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <use href="#icon-trash" />
+              </svg>
+              <span>Eliminar playlist</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Modal de confirmación para eliminar playlist */}
+      {deleteTarget && (
+        <div
+          className="modal-bg"
+          onClick={event => {
+            if (event.target === event.currentTarget) handleCancelDelete();
+          }}
+        >
+          <div
+            className="modal dp-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dp-modal-ttl"
+            aria-describedby="dp-modal-txt"
+          >
+            <div className="dp-bdy">
+              <h2 className="dp-ttl" id="dp-modal-ttl">
+                ¿Quieres eliminar este elemento de Tu biblioteca?
+              </h2>
+              <p className="dp-txt" id="dp-modal-txt">
+                Se eliminará {deleteTarget.name} de Tu biblioteca.
+              </p>
+            </div>
+
+            <div className="dp-footer">
+              <button className="btn-cancel-dp" type="button" onClick={handleCancelDelete}>
+                Cancelar
+              </button>
+              <button className="btn-delete-dp" type="button" onClick={handleConfirmDelete} autoFocus>
+                Eliminar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </aside>

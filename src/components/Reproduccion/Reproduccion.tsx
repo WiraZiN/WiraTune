@@ -85,18 +85,21 @@ const Reproduccion: React.FC<ReproduccionProps> = ({
     if (!audio || !activeTrack) return;
 
     if (!canPlay) {
-      if (isPlaying) {
-        setIsPlaying(false);
-      }
+      if (isPlaying) setIsPlaying(false);
       return;
     }
 
     if (isPlaying) {
-      void audio.play().catch(() => setIsPlaying(false));
+      void audio.play().catch(err => {
+        // AbortError ocurre al cambiar de canción: no es un fallo real, ignorar
+        if ((err as DOMException).name !== 'AbortError') {
+          setIsPlaying(false);
+        }
+      });
     } else {
       audio.pause();
     }
-  }, [canPlay, isPlaying, setIsPlaying]);
+  }, [canPlay, isPlaying, setIsPlaying, activeTrack]); // ← añadir activeTrack
 
   useEffect(() => {
     if (!ghostRef.current) return;
@@ -228,7 +231,7 @@ const Reproduccion: React.FC<ReproduccionProps> = ({
       <div className="player" id="wt-player-root">
         <div className="player-left">
           <div className="player-thumb">
-            <MusicSvg color='#404040' height='3em' width='3em'/>
+            <MusicSvg color='#404040' height='3em' width='3em' />
           </div>
 
           <div className="player-info">
